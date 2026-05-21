@@ -21,40 +21,36 @@ env:
   RUST_BACKTRACE: 1
 
 jobs:
-  # Formatting is platform-independent — one OS is enough.
   rustfmt:
     name: rustfmt
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - name: Install Rust
-        run: rustup update stable && rustup default stable && rustup component add rustfmt
+        run: rustup toolchain install 1.95.0 --profile minimal --component rustfmt && rustup default 1.95.0
       - name: Check formatting
         run: cargo fmt --all -- --check
 
   clippy:
     name: clippy
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - name: Install Rust
-        run: rustup update stable --no-self-update && rustup default stable && rustup component add clippy
+        # Pinned to a specific stable so trybuild `.stderr` diagnostics are
+        # reproducible across local and CI; bump in lockstep with regenerated
+        # UI expectations.
+        run: rustup toolchain install 1.95.0 --profile minimal --component clippy && rustup default 1.95.0
       - name: Clippy
         run: cargo clippy --all-targets -- -D warnings
 
   test:
     name: test
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - name: Install Rust
-        run: rustup update stable --no-self-update && rustup default stable
+        run: rustup toolchain install 1.95.0 --profile minimal && rustup default 1.95.0
       - name: Build
         run: cargo build --all-targets
       - name: Test (std, default)

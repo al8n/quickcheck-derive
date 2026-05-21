@@ -2,7 +2,7 @@
 name = "quickcheck-derive"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.56"
+rust-version = "1.85"
 repository = "https://github.com/al8n/quickcheck-derive"
 homepage = "https://github.com/al8n/quickcheck-derive"
 documentation = "https://docs.rs/quickcheck-derive"
