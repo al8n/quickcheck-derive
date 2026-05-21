@@ -2,7 +2,7 @@
 
 use proc_macro2::{Span, TokenStream as TokenStream2};
 use quote::quote;
-use syn::{DataEnum, DeriveInput, Error, Fields, Ident, Path, spanned::Spanned};
+use syn::{DataEnum, DeriveInput, Error, Fields, Ident, Path};
 
 use crate::attrs::{ContainerAttrs, FieldAttrs, VariantAttrs};
 
@@ -281,10 +281,18 @@ fn enum_arbitrary(
 ) -> syn::Result<TokenStream2> {
   let mut indices = Vec::new();
   let mut arms = Vec::new();
+  // Anchor span for the all-skipped diagnostic. We anchor on the FIRST
+  // variant's ident — a narrow, deterministic proc-macro2 span (just the
+  // variant name), not the multi-line `data.variants.span()` which rustc
+  // renders inconsistently across versions.
+  let mut all_skipped_span: Option<proc_macro2::Span> = None;
 
   for variant in &data.variants {
     let vattrs = VariantAttrs::parse(&variant.attrs)?;
     if vattrs.skip {
+      if all_skipped_span.is_none() {
+        all_skipped_span = Some(variant.ident.span());
+      }
       continue;
     }
 
@@ -311,8 +319,9 @@ fn enum_arbitrary(
   }
 
   if indices.is_empty() {
+    let span = all_skipped_span.unwrap_or_else(|| name.span());
     return Err(Error::new(
-      data.variants.span(),
+      span,
       "all enum variants are `#[quickcheck(skip)]`; `arbitrary` cannot pick a variant",
     ));
   }
