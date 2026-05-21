@@ -1,4 +1,4 @@
-error: `default` and `with` are mutually exclusive on a field
+error: `default` is mutually exclusive with `with` and `arbitrary` on a field
  --> tests/ui/field_default_and_with.rs:5:3
   |
 5 |   #[quickcheck(default, with = "whatever")]
