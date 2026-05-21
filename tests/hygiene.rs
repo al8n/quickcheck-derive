@@ -141,10 +141,48 @@ fn enum_fields_named_like_macro_internals() {
   let _generated = InternalNames::arbitrary(&mut gen);
 }
 
-// NOTE on the residual limitation: a user `const` parameter named *exactly* like
-// one of the macro's generated locals (e.g. `const __quickcheck_chain`) still
-// cannot be supported — rustc rejects it with E0530 ("let bindings cannot shadow
-// const parameters") and resolves identically-named pattern bindings to the const
-// param, *both pre-hygiene*, so even `Span::mixed_site()` idents collide. No
-// derive can generate a binding guaranteed distinct from such a const param; the
-// `__quickcheck_` prefix makes this an effectively impossible name in practice.
+// Const PARAMETERS spelled *exactly* like the macro's internal idents are
+// supported: the `Hygiene` allocator suffixes generated names when a colliding
+// `const __quickcheck_*` param exists, so they can't clash (rustc resolves
+// const params before hygiene, so the suffix — not `mixed_site` — is what makes
+// this compile).
+#[derive(Clone, Debug, PartialEq, DeriveArbitrary)]
+struct ConstNamedG<const __quickcheck_g: usize> {
+  a: u32,
+}
+
+#[test]
+fn const_param_named_like_gen_param() {
+  let mut gen = gen();
+  let value: ConstNamedG<2> = ConstNamedG::arbitrary(&mut gen);
+  let _shrinks: Vec<ConstNamedG<2>> = value.shrink().collect();
+}
+
+#[derive(Clone, Debug, PartialEq, DeriveArbitrary)]
+struct ConstNamedChain<const __quickcheck_chain: usize> {
+  x: u32,
+  y: u8,
+}
+
+#[test]
+fn const_param_named_like_struct_shrink_local() {
+  let value = ConstNamedChain::<2> { x: 9, y: 4 };
+  let shrinks: Vec<ConstNamedChain<2>> = value.shrink().collect();
+  assert!(!shrinks.is_empty());
+  let mut gen = gen();
+  let _generated: ConstNamedChain<2> = ConstNamedChain::arbitrary(&mut gen);
+}
+
+#[derive(Clone, Debug, PartialEq, DeriveArbitrary)]
+enum ConstNamedEnum<const __quickcheck_field0: usize, const __quickcheck_shrunk: usize> {
+  V(u8, u16),
+  W,
+}
+
+#[test]
+fn const_params_named_like_variant_shrink_locals() {
+  let value = ConstNamedEnum::<1, 2>::V(5, 9);
+  let _shrinks: Vec<ConstNamedEnum<1, 2>> = value.shrink().collect();
+  let mut gen = gen();
+  let _generated: ConstNamedEnum<1, 2> = ConstNamedEnum::arbitrary(&mut gen);
+}

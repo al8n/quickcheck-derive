@@ -2,7 +2,7 @@
 #![doc = include_str!("../README.md")]
 
 use proc_macro::TokenStream;
-use proc_macro2::{Span, TokenStream as TokenStream2};
+use proc_macro2::TokenStream as TokenStream2;
 use quote::quote;
 use syn::{
   parse_macro_input, punctuated::Punctuated, Data, DeriveInput, Error, Ident, Path, Token, Type,
@@ -35,18 +35,21 @@ fn expand(input: DeriveInput) -> syn::Result<TokenStream2> {
   // even in positions a particular path would otherwise skip.
   validate_all_attrs(&input)?;
 
-  // The hygienic `&mut Gen` parameter ident, shared by the impl signature and
-  // every generated body. `mixed_site` hygiene means it cannot collide with any
-  // user identifier (e.g. a `const __quickcheck_g` parameter).
-  let g = Ident::new("__quickcheck_g", Span::mixed_site());
+  // Allocates all macro-internal identifiers so none collides with a user
+  // `const` parameter of the same spelling (which bypasses macro hygiene).
+  let hyg = codegen::Hygiene::new(&input);
+
+  // The `&mut Gen` parameter ident, shared by the impl signature and every
+  // generated body (collision-free + `mixed_site`).
+  let g = hyg.ident("__quickcheck_g");
 
   let name = &input.ident;
   let (impl_generics, ty_generics, _) = input.generics.split_for_impl();
   let where_clause = build_where_clause(&input, &container, &qc);
 
   let (arbitrary_body, shrink_body) = match &input.data {
-    Data::Struct(data) => codegen::struct_bodies(name, &data.fields, &container, &g, &qc)?,
-    Data::Enum(data) => codegen::enum_bodies(name, data, &container, &g, &qc)?,
+    Data::Struct(data) => codegen::struct_bodies(name, &data.fields, &container, &g, &hyg, &qc)?,
+    Data::Enum(data) => codegen::enum_bodies(name, data, &container, &g, &hyg, &qc)?,
     Data::Union(_) => {
       return Err(Error::new_spanned(
         &input,

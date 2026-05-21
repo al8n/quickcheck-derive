@@ -85,11 +85,17 @@ struct S {
 
 #### `bound = "P: Bound, Q: Other"` (repeatable)
 
-By default the derive infers `Param: quickcheck::Arbitrary` for every generic
-**type** parameter (lifetimes and `const` params are skipped). If you supply one
-or more `bound` attributes, they **replace** that inference: the generated
-`where` clause becomes the type's own predicates **plus exactly** the predicates
-you list (multiple `bound = "..."` accumulate).
+By default the derive infers a **`<FieldTy>: quickcheck::Arbitrary` bound for each
+generated field whose type mentions a generic parameter** (type *or* const) — e.g.
+`T: Arbitrary` for a `T` field, `Vec<T>: Arbitrary`, `<T as Trait>::Item:
+Arbitrary` for a projection, or `Only<N>: Arbitrary` for a const-generic field
+type. Fields produced via `with` / `default`, and `skip` / variant-`with`
+variants, contribute no bound (they are never generated via `Arbitrary`).
+Bounding the field types — rather than the params inside them — keeps projected /
+associated types sound. If you supply one or more `bound` attributes, they
+**replace** that inference entirely: the generated `where` clause becomes the
+type's own predicates **plus exactly** the predicates you list (multiple
+`bound = "..."` accumulate).
 
 ```rust,ignore
 // Default inference: `where T: quickcheck::Arbitrary`.
@@ -231,8 +237,9 @@ fn gen_pixels(g: &mut Gen) -> Pixels { Pixels::arbitrary(g) }
 
 - **Output** — wrapped in `const _: () = { impl … { fn arbitrary; fn shrink } };`;
   `Arbitrary` / `Gen` are referenced through the `crate` path.
-- **`where` clause** — `split_for_impl` + either explicit `bound`s or the inferred
-  `Param: <crate>::Arbitrary` per generic type param.
+- **`where` clause** — `split_for_impl` + either explicit `bound`s or an inferred
+  `<FieldTy>: <crate>::Arbitrary` per generated field type that mentions a generic
+  (type or const) param.
 - **Struct** — `arbitrary` builds the struct literal (each field per its rule);
   `shrink` clones `self`, assigns one shrunk field at a time, and chains.
 - **Enum** — `arbitrary` does `match *g.choose(&[non-skipped indices]).unwrap()`;
