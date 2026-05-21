@@ -308,6 +308,17 @@ add a crate-root import). Generation otherwise uses only `core` paths
 (`core::iter::Iterator`, `core::clone::Clone`, `core::default::Default`), so the
 output is no-std-ready.
 
+## Limitations
+
+- **`#[repr(packed)]` structs are not supported.** The field-derived `shrink`
+  borrows fields (`&self.field`), which is invalid for a packed layout (rustc
+  `error[E0793]: reference to packed field is unaligned`). Use a non-packed type,
+  or override generation/shrinking with `#[quickcheck(with = "...", shrink =
+  "...")]`.
+- **Edition 2018 or later** is required by consumers. The generated code uses
+  absolute `::core` paths, which edition 2015 does not have in the crate root
+  (it would need `extern crate core;`). Editions 2018 and 2021 are unaffected.
+
 ## License
 
 Licensed under either of
