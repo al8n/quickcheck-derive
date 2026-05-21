@@ -2,7 +2,7 @@
 name = "quickcheck-derive"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.73"
+rust-version = "1.56"
 repository = "https://github.com/al8n/quickcheck-derive"
 homepage = "https://github.com/al8n/quickcheck-derive"
 documentation = "https://docs.rs/quickcheck-derive"
@@ -12,7 +12,6 @@ keywords = ["quickcheck", "arbitrary", "derive", "testing", "fuzzing"]
 categories = ["development-tools::testing", "rust-patterns"]
 
 [lib]
-name = "quickcheck_derive"
 proc-macro = true
 
 [features]
