@@ -412,8 +412,14 @@ fn variant_shrink(
         #chain = #box_ty::new(#chain.chain(
           (#iter).map(move |#v| {
             let mut #out = ::core::clone::Clone::clone(&#base);
-            if let #slot_pattern = &mut #out {
-              *#slot = #v;
+            // `out` is always this variant, but a `match` (not `if let`) keeps
+            // this warning-free for single-variant enums, where an `if let`
+            // would be irrefutable. The wildcard is unreachable only for
+            // single-variant enums, hence the `allow`.
+            match &mut #out {
+              #slot_pattern => *#slot = #v,
+              #[allow(unreachable_patterns)]
+              _ => {}
             }
             #out
           })

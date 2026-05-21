@@ -212,3 +212,30 @@ fn manual_clone_enum_with_non_clone_held_field() {
   let mut g = gen();
   let _ = HeldEnum::arbitrary(&mut g);
 }
+
+// Single-variant enums: the in-place slot assignment must not emit an
+// irrefutable-`if let` warning (round-8). This file compiles under `-D warnings`.
+#[derive(Clone, Debug, PartialEq, DeriveArbitrary)]
+enum SingleNamed {
+  Only { a: u8, b: u16 },
+}
+
+#[derive(Clone, Debug, PartialEq, DeriveArbitrary)]
+enum SingleTuple {
+  Only(u8, u16),
+}
+
+#[test]
+fn single_variant_enum_shrink() {
+  let n = SingleNamed::Only { a: 5, b: 9 };
+  for s in n.shrink() {
+    match s {
+      SingleNamed::Only { a, b } => assert!(a != 5 || b != 9),
+    }
+  }
+  let t = SingleTuple::Only(5, 9);
+  let _ = t.shrink().count();
+  let mut g = gen();
+  let _ = SingleNamed::arbitrary(&mut g);
+  let _ = SingleTuple::arbitrary(&mut g);
+}
