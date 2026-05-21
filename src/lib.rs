@@ -66,6 +66,12 @@ fn expand(input: DeriveInput) -> syn::Result<TokenStream2> {
 
   Ok(quote! {
     const _: () = {
+      // `#[automatically_derived]` marks this as derive output (and is exempt
+      // from `non_local_definitions`); the `allow` is defensive across rustc
+      // versions, with `unknown_lints` keeping it valid on toolchains predating
+      // the lint.
+      #[automatically_derived]
+      #[allow(unknown_lints, non_local_definitions)]
       impl #impl_generics #qc::Arbitrary for #name #ty_generics #where_clause {
         fn arbitrary(#g: &mut #qc::Gen) -> Self {
           #arbitrary_body
