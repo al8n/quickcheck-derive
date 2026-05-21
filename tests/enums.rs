@@ -170,3 +170,45 @@ fn variant_with_precedence_and_empty_shrink() {
   let value = Combo::Made { x: 1, y: 2 };
   assert_eq!(value.shrink().count(), 0);
 }
+
+// Manual-`Clone` enum with a non-`Clone` `#[quickcheck(default)]` held field
+// alongside a shrinkable field (round-7 finding): enum shrink must clone the
+// whole `Self` (relying on `Self: Clone`) and never clone the held field, so
+// `NotCloneButDefault` need not be `Clone`.
+#[derive(Default)]
+struct NotCloneButDefault;
+
+#[allow(dead_code)] // `held` is generated/cloned but never read in the test.
+#[derive(DeriveArbitrary)]
+enum HeldEnum {
+  V {
+    keep: u8,
+    #[quickcheck(default)]
+    held: NotCloneButDefault,
+  },
+  W,
+}
+
+impl Clone for HeldEnum {
+  fn clone(&self) -> Self {
+    match self {
+      Self::V { keep, .. } => Self::V {
+        keep: *keep,
+        held: NotCloneButDefault,
+      },
+      Self::W => Self::W,
+    }
+  }
+}
+
+#[test]
+fn manual_clone_enum_with_non_clone_held_field() {
+  let value = HeldEnum::V {
+    keep: 9,
+    held: NotCloneButDefault,
+  };
+  // Shrinking `keep` must not require `NotCloneButDefault: Clone`.
+  let _ = value.shrink().count();
+  let mut g = gen();
+  let _ = HeldEnum::arbitrary(&mut g);
+}

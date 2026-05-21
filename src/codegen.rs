@@ -356,9 +356,12 @@ fn variant_wildcard_pattern(name: &Ident, vname: &Ident, fields: &Fields) -> Tok
 
 /// Generate the `(pattern, body)` for a variant's field-derived shrink arm.
 ///
-/// Shrinks one field at a time, rebuilding the whole variant explicitly with the
-/// shrunk field and clones of the others. Returns a non-binding pattern + empty
-/// body when there is nothing to shrink.
+/// Mirrors struct shrink: clone the whole `self` as a base, then per produced
+/// item clone the base and mutate just the shrunk field in place (via a
+/// `match &mut out` on the variant). This depends only on `Self: Clone` — never
+/// on individual fields being `Clone` — so held / `default` / `with` fields that
+/// are not `Clone` are fine. Returns a non-binding pattern + empty body when
+/// there is nothing to shrink.
 fn variant_shrink(
   name: &Ident,
   vname: &Ident,
@@ -368,85 +371,56 @@ fn variant_shrink(
   box_ty: &Path,
   qc: &Path,
 ) -> (TokenStream2, TokenStream2) {
-  let nothing = (
-    variant_wildcard_pattern(name, vname, fields),
-    empty_iter(box_ty),
-  );
+  // Indices of fields that actually shrink.
+  let shrinkable: Vec<usize> = field_attrs
+    .iter()
+    .enumerate()
+    .filter(|(_, a)| field_is_shrinkable(a))
+    .map(|(i, _)| i)
+    .collect();
 
-  if matches!(fields, Fields::Unit) {
-    return nothing;
-  }
-  if !field_attrs.iter().any(field_is_shrinkable) {
-    return nothing;
+  if matches!(fields, Fields::Unit) || shrinkable.is_empty() {
+    return (
+      variant_wildcard_pattern(name, vname, fields),
+      empty_iter(box_ty),
+    );
   }
 
-  // Match-binding idents for each field — always fresh `__quickcheck_field{i}`
-  // bindings (never the user's field idents), so a variant field literally named
-  // e.g. `__quickcheck_chain` can't be shadowed by a generated local. Named
-  // variants bind via `real_name: __quickcheck_field{i}` (see the pattern below).
-  // All are referenced by `rebuild_variant`, so none go unused.
   let chain = hyg.ident("__quickcheck_chain");
-  let shrunk = hyg.ident("__quickcheck_shrunk");
+  let base = hyg.ident("__quickcheck_base");
+  let out = hyg.ident("__quickcheck_out");
+  let v = hyg.ident("__quickcheck_v");
+  let slot = hyg.ident("__quickcheck_slot");
 
-  let bind_idents: Vec<Ident> = (0..fields.len())
-    .map(|i| hyg.ident(&format!("__quickcheck_field{i}")))
+  // One binding ident per shrinkable field (bound as `&Field` in the outer
+  // pattern via default match modes), used to feed that field's shrink iterator.
+  let bindings: Vec<(usize, Ident)> = shrinkable
+    .iter()
+    .map(|&i| (i, hyg.ident(&format!("__quickcheck_field{i}"))))
     .collect();
 
-  let is_named = matches!(fields, Fields::Named(_));
-
-  // Per-clause owned "base" idents, so each closure captures its own copies.
-  let base_idents: Vec<Ident> = (0..bind_idents.len())
-    .map(|i| hyg.ident(&format!("__quickcheck_base{i}")))
-    .collect();
+  let outer_pattern = variant_bind_pattern(name, vname, fields, &bindings);
+  let field_count = fields.len();
 
   let mut clauses = Vec::new();
-
-  for (i, attrs) in field_attrs.iter().enumerate() {
-    if !field_is_shrinkable(attrs) {
-      continue;
-    }
-
-    // Clone every match-bound reference into a fresh owned value for this
-    // closure to capture (and then re-clone per produced item).
-    let clones = bind_idents
-      .iter()
-      .zip(&base_idents)
-      .map(|(bound, base)| quote!(let #base = ::core::clone::Clone::clone(#bound);));
-
-    let shrink_target = &base_idents[i];
-    let iter = field_shrink_iter(attrs, &quote!(&#shrink_target), qc);
-
-    // Rebuild the variant: shrunk field = __quickcheck_shrunk, others = clones.
-    let rebuild = rebuild_variant(name, vname, fields, &base_idents, i, is_named, &shrunk);
-
+  for (i, binding) in &bindings {
+    let iter = field_shrink_iter(&field_attrs[*i], &quote!(#binding), qc);
+    let slot_pattern = variant_slot_pattern(name, vname, fields, *i, field_count, &slot);
     clauses.push(quote! {
       {
-        #(#clones)*
+        let #base = ::core::clone::Clone::clone(self);
         #chain = #box_ty::new(#chain.chain(
-          (#iter).map(move |#shrunk| {
-            #rebuild
+          (#iter).map(move |#v| {
+            let mut #out = ::core::clone::Clone::clone(&#base);
+            if let #slot_pattern = &mut #out {
+              *#slot = #v;
+            }
+            #out
           })
         ));
       }
     });
   }
-
-  let pattern = match fields {
-    Fields::Named(named) => {
-      // `real_name: __quickcheck_field{i}` — bind each field to a fresh internal
-      // ident so user field names never become bindings that could collide.
-      let binds = named.named.iter().zip(&bind_idents).map(|(f, bind)| {
-        let ident = f.ident.as_ref().expect("named field has ident");
-        quote!(#ident: #bind)
-      });
-      quote!(#name::#vname { #(#binds),* })
-    }
-    Fields::Unnamed(_) => {
-      let binds = &bind_idents;
-      quote!(#name::#vname ( #(#binds),* ))
-    }
-    Fields::Unit => unreachable!(),
-  };
 
   let body = quote! {
     let mut #chain: #box_ty<dyn ::core::iter::Iterator<Item = Self>> =
@@ -455,45 +429,61 @@ fn variant_shrink(
     #chain
   };
 
-  (pattern, body)
+  (outer_pattern, body)
 }
 
-/// Rebuild a variant value where field `shrunk_index` is the `shrunk` binding and
-/// the others are clones of their bound idents.
-fn rebuild_variant(
+/// Outer match pattern binding exactly the shrinkable fields (by their internal
+/// ident, as `&Field`), ignoring the rest.
+fn variant_bind_pattern(
   name: &Ident,
   vname: &Ident,
   fields: &Fields,
-  bind_idents: &[Ident],
-  shrunk_index: usize,
-  is_named: bool,
-  shrunk: &Ident,
+  bindings: &[(usize, Ident)],
 ) -> TokenStream2 {
-  if is_named {
-    let named = match fields {
-      Fields::Named(n) => n,
-      _ => unreachable!(),
-    };
-    let inits = named.named.iter().enumerate().map(|(i, f)| {
-      let ident = f.ident.as_ref().expect("named field has ident");
-      if i == shrunk_index {
-        quote!(#ident: #shrunk)
-      } else {
-        let bound = &bind_idents[i];
-        quote!(#ident: ::core::clone::Clone::clone(&#bound))
-      }
-    });
-    quote!(#name::#vname { #(#inits),* })
-  } else {
-    let inits = (0..bind_idents.len()).map(|i| {
-      if i == shrunk_index {
-        quote!(#shrunk)
-      } else {
-        let bound = &bind_idents[i];
-        quote!(::core::clone::Clone::clone(&#bound))
-      }
-    });
-    quote!(#name::#vname ( #(#inits),* ))
+  match fields {
+    Fields::Named(named) => {
+      let binds = named.named.iter().enumerate().filter_map(|(i, f)| {
+        bindings.iter().find(|(bi, _)| *bi == i).map(|(_, ident)| {
+          let fname = f.ident.as_ref().expect("named field has ident");
+          quote!(#fname: #ident)
+        })
+      });
+      quote!(#name::#vname { #(#binds,)* .. })
+    }
+    Fields::Unnamed(unnamed) => {
+      let elems =
+        (0..unnamed.unnamed.len()).map(|i| match bindings.iter().find(|(bi, _)| *bi == i) {
+          Some((_, ident)) => quote!(#ident),
+          None => quote!(_),
+        });
+      quote!(#name::#vname ( #(#elems),* ))
+    }
+    Fields::Unit => unreachable!(),
+  }
+}
+
+/// `&mut` match pattern binding only field `index` as `slot`, ignoring the rest.
+fn variant_slot_pattern(
+  name: &Ident,
+  vname: &Ident,
+  fields: &Fields,
+  index: usize,
+  field_count: usize,
+  slot: &Ident,
+) -> TokenStream2 {
+  match fields {
+    Fields::Named(named) => {
+      let fname = named.named[index]
+        .ident
+        .as_ref()
+        .expect("named field has ident");
+      quote!(#name::#vname { #fname: #slot, .. })
+    }
+    Fields::Unnamed(_) => {
+      let elems = (0..field_count).map(|i| if i == index { quote!(#slot) } else { quote!(_) });
+      quote!(#name::#vname ( #(#elems),* ))
+    }
+    Fields::Unit => unreachable!(),
   }
 }
 
