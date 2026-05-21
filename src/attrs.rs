@@ -17,7 +17,6 @@
 
 use syn::{
   Attribute, Error, Path, Token, WherePredicate, parse_str, punctuated::Punctuated,
-  spanned::Spanned,
 };
 
 /// Parse a string-literal value into a `syn::Path`, keeping the literal's span
@@ -37,18 +36,6 @@ fn parse_predicates(lit: &syn::LitStr) -> syn::Result<Vec<WherePredicate>> {
         format!("failed to parse `bound` as where-predicates: {e}"),
       )
     })
-}
-
-/// Span of the first `#[quickcheck(...)]` attribute on an item, falling back to
-/// `Span::call_site()`. Used as the anchor span for cross-cutting mutex errors
-/// (e.g. `with` + `arbitrary`) that span the whole attribute set rather than
-/// any single identifier.
-fn quickcheck_attr_span(attrs: &[Attribute]) -> proc_macro2::Span {
-  attrs
-    .iter()
-    .find(|a| a.path().is_ident("quickcheck"))
-    .map(|a| a.span())
-    .unwrap_or_else(proc_macro2::Span::call_site)
 }
 
 /// Attributes accepted on the struct/enum itself.
@@ -88,12 +75,39 @@ impl ContainerAttrs {
           let lit: syn::LitStr = meta.value()?.parse()?;
           out.bounds.extend(parse_predicates(&lit)?);
         } else if meta.path.is_ident("with") {
+          // Mutex check at the *offending* keyword's span — narrower and more
+          // localized than a post-parse pass anchored on the whole attribute,
+          // which would render differently across rustc versions.
+          if out.arbitrary.is_some() {
+            return Err(meta.error(
+              "`with` and `arbitrary` are mutually exclusive on a container — \
+               `with = \"mod\"` already provides `arbitrary` via `mod::arbitrary`",
+            ));
+          }
+          if out.shrink.is_some() {
+            return Err(meta.error(
+              "`with` and `shrink` are mutually exclusive on a container — \
+               `with = \"mod\"` already provides `shrink` via `mod::shrink`",
+            ));
+          }
           let lit: syn::LitStr = meta.value()?.parse()?;
           out.with = Some(parse_path(&lit)?);
         } else if meta.path.is_ident("arbitrary") {
+          if out.with.is_some() {
+            return Err(meta.error(
+              "`arbitrary` and `with` are mutually exclusive on a container — \
+               `with = \"mod\"` already provides `arbitrary` via `mod::arbitrary`",
+            ));
+          }
           let lit: syn::LitStr = meta.value()?.parse()?;
           out.arbitrary = Some(parse_path(&lit)?);
         } else if meta.path.is_ident("shrink") {
+          if out.with.is_some() {
+            return Err(meta.error(
+              "`shrink` and `with` are mutually exclusive on a container — \
+               `with = \"mod\"` already provides `shrink` via `mod::shrink`",
+            ));
+          }
           let lit: syn::LitStr = meta.value()?.parse()?;
           out.shrink = Some(parse_path(&lit)?);
         } else if meta.path.is_ident("box") {
@@ -108,26 +122,7 @@ impl ContainerAttrs {
         Ok(())
       })?;
     }
-    out.validate(attrs)?;
     Ok(out)
-  }
-
-  fn validate(&self, attrs: &[Attribute]) -> syn::Result<()> {
-    if self.with.is_some() && self.arbitrary.is_some() {
-      return Err(Error::new(
-        quickcheck_attr_span(attrs),
-        "`with` and `arbitrary` are mutually exclusive on a container — \
-         `with = \"mod\"` already provides `arbitrary` via `mod::arbitrary`",
-      ));
-    }
-    if self.with.is_some() && self.shrink.is_some() {
-      return Err(Error::new(
-        quickcheck_attr_span(attrs),
-        "`with` and `shrink` are mutually exclusive on a container — \
-         `with = \"mod\"` already provides `shrink` via `mod::shrink`",
-      ));
-    }
-    Ok(())
   }
 
   /// The quickcheck base path (default `::quickcheck`).
@@ -163,15 +158,54 @@ impl FieldAttrs {
       }
       attr.parse_nested_meta(|meta| {
         if meta.path.is_ident("with") {
+          if out.arbitrary.is_some() {
+            return Err(meta.error(
+              "`with` and `arbitrary` are mutually exclusive on a field — \
+               `with = \"mod\"` already provides `arbitrary` via `mod::arbitrary`",
+            ));
+          }
+          if out.shrink.is_some() {
+            return Err(meta.error(
+              "`with` and `shrink` are mutually exclusive on a field — \
+               `with = \"mod\"` already provides `shrink` via `mod::shrink`",
+            ));
+          }
+          if out.default {
+            return Err(
+              meta.error("`with` and `default` are mutually exclusive on a field"),
+            );
+          }
           let lit: syn::LitStr = meta.value()?.parse()?;
           out.with = Some(parse_path(&lit)?);
         } else if meta.path.is_ident("arbitrary") {
+          if out.with.is_some() {
+            return Err(meta.error(
+              "`arbitrary` and `with` are mutually exclusive on a field — \
+               `with = \"mod\"` already provides `arbitrary` via `mod::arbitrary`",
+            ));
+          }
+          if out.default {
+            return Err(
+              meta.error("`arbitrary` and `default` are mutually exclusive on a field"),
+            );
+          }
           let lit: syn::LitStr = meta.value()?.parse()?;
           out.arbitrary = Some(parse_path(&lit)?);
         } else if meta.path.is_ident("shrink") {
+          if out.with.is_some() {
+            return Err(meta.error(
+              "`shrink` and `with` are mutually exclusive on a field — \
+               `with = \"mod\"` already provides `shrink` via `mod::shrink`",
+            ));
+          }
           let lit: syn::LitStr = meta.value()?.parse()?;
           out.shrink = Some(parse_path(&lit)?);
         } else if meta.path.is_ident("default") {
+          if out.with.is_some() || out.arbitrary.is_some() {
+            return Err(meta.error(
+              "`default` is mutually exclusive with `with` and `arbitrary` on a field",
+            ));
+          }
           out.default = true;
         } else {
           return Err(meta.error(
@@ -181,33 +215,7 @@ impl FieldAttrs {
         Ok(())
       })?;
     }
-    out.validate(attrs)?;
     Ok(out)
-  }
-
-  fn validate(&self, attrs: &[Attribute]) -> syn::Result<()> {
-    let span = quickcheck_attr_span(attrs);
-    if self.with.is_some() && self.arbitrary.is_some() {
-      return Err(Error::new(
-        span,
-        "`with` and `arbitrary` are mutually exclusive on a field — \
-         `with = \"mod\"` already provides `arbitrary` via `mod::arbitrary`",
-      ));
-    }
-    if self.with.is_some() && self.shrink.is_some() {
-      return Err(Error::new(
-        span,
-        "`with` and `shrink` are mutually exclusive on a field — \
-         `with = \"mod\"` already provides `shrink` via `mod::shrink`",
-      ));
-    }
-    if self.default && (self.with.is_some() || self.arbitrary.is_some()) {
-      return Err(Error::new(
-        span,
-        "`default` is mutually exclusive with `with` and `arbitrary` on a field",
-      ));
-    }
-    Ok(())
   }
 }
 
@@ -236,12 +244,32 @@ impl VariantAttrs {
         if meta.path.is_ident("skip") {
           out.skip = true;
         } else if meta.path.is_ident("with") {
+          if out.arbitrary.is_some() {
+            return Err(meta.error(
+              "`with` and `arbitrary` are mutually exclusive on a variant",
+            ));
+          }
+          if out.shrink.is_some() {
+            return Err(
+              meta.error("`with` and `shrink` are mutually exclusive on a variant"),
+            );
+          }
           let lit: syn::LitStr = meta.value()?.parse()?;
           out.with = Some(parse_path(&lit)?);
         } else if meta.path.is_ident("arbitrary") {
+          if out.with.is_some() {
+            return Err(meta.error(
+              "`arbitrary` and `with` are mutually exclusive on a variant",
+            ));
+          }
           let lit: syn::LitStr = meta.value()?.parse()?;
           out.arbitrary = Some(parse_path(&lit)?);
         } else if meta.path.is_ident("shrink") {
+          if out.with.is_some() {
+            return Err(
+              meta.error("`shrink` and `with` are mutually exclusive on a variant"),
+            );
+          }
           let lit: syn::LitStr = meta.value()?.parse()?;
           out.shrink = Some(parse_path(&lit)?);
         } else {
@@ -252,26 +280,10 @@ impl VariantAttrs {
         Ok(())
       })?;
     }
-    out.validate(attrs)?;
     Ok(out)
   }
 
-  fn validate(&self, attrs: &[Attribute]) -> syn::Result<()> {
-    let span = quickcheck_attr_span(attrs);
-    if self.with.is_some() && self.arbitrary.is_some() {
-      return Err(Error::new(
-        span,
-        "`with` and `arbitrary` are mutually exclusive on a variant",
-      ));
-    }
-    if self.with.is_some() && self.shrink.is_some() {
-      return Err(Error::new(
-        span,
-        "`with` and `shrink` are mutually exclusive on a variant",
-      ));
-    }
-    // Note: combining `skip` with the others is a no-op (the variant is never
-    // generated) rather than an error — preserves the previous semantics.
-    Ok(())
-  }
+  // Note: combining `skip` with `with`/`arbitrary`/`shrink` is a no-op (the
+  // variant is never generated) rather than an error — preserves the
+  // previous semantics.
 }
