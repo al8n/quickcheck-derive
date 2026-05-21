@@ -1,0 +1,7 @@
+error: `#[derive(Arbitrary)]` does not support unions
+ --> tests/ui/union_unsupported.rs:4:1
+  |
+4 | / union U {
+5 | |   a: u32,
+6 | | }
+  | |_^
