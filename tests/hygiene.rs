@@ -96,3 +96,47 @@ fn fields_named_like_internals_enum() {
   let mut gen = gen();
   let _generated = CollidingEnum::arbitrary(&mut gen);
 }
+
+// Enum named-variant fields literally named after the macro's OWN internal
+// idents (round-2 finding B): the named-variant shrink must bind fields to fresh
+// positional idents, so these are never shadowed by a generated local.
+#[derive(Clone, Debug, PartialEq, DeriveArbitrary)]
+enum InternalNames {
+  V {
+    __quickcheck_chain: u8,
+    __quickcheck_field0: u16,
+    __quickcheck_base0: bool,
+    __quickcheck_shrunk: u32,
+  },
+  Other(u8),
+}
+
+#[test]
+fn enum_fields_named_like_macro_internals() {
+  let value = InternalNames::V {
+    __quickcheck_chain: 3,
+    __quickcheck_field0: 7,
+    __quickcheck_base0: true,
+    __quickcheck_shrunk: 11,
+  };
+  for s in value.shrink() {
+    match s {
+      InternalNames::V {
+        __quickcheck_chain,
+        __quickcheck_field0,
+        __quickcheck_base0,
+        __quickcheck_shrunk,
+      } => {
+        let diffs = (__quickcheck_chain != 3) as u32
+          + (__quickcheck_field0 != 7) as u32
+          + (!__quickcheck_base0) as u32
+          + (__quickcheck_shrunk != 11) as u32;
+        assert_eq!(diffs, 1, "exactly one field shrinks at a time");
+      }
+      other => panic!("shrink changed variant: {other:?}"),
+    }
+  }
+
+  let mut gen = gen();
+  let _generated = InternalNames::arbitrary(&mut gen);
+}

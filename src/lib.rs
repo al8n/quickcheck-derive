@@ -86,8 +86,8 @@ fn build_where_clause(input: &DeriveInput, container: &ContainerAttrs, qc: &Path
     .unwrap_or_default();
 
   if container.bounds.is_empty() {
-    for ident in inferred_bound_params(input, container) {
-      predicates.push(syn::parse_quote!(#ident: #qc::Arbitrary));
+    for ty in inferred_bound_types(input, container) {
+      predicates.push(syn::parse_quote!(#ty: #qc::Arbitrary));
     }
   } else {
     for predicate in &container.bounds {
@@ -102,14 +102,21 @@ fn build_where_clause(input: &DeriveInput, container: &ContainerAttrs, qc: &Path
   }
 }
 
-/// The set of generic type-param idents that should receive an inferred
-/// `: Arbitrary` bound: those structurally used by some field that is generated
-/// via `<qc>::Arbitrary::arbitrary` (see the per-path rules below).
+/// The set of **field types** that should receive an inferred `: Arbitrary`
+/// bound: the types of fields generated via `<qc>::Arbitrary::arbitrary` that
+/// mention at least one generic type param.
 ///
-/// Returns idents in declaration order. Parse errors are ignored here — they are
+/// Bounding the field type itself (e.g. `<T as Trait>::Item: Arbitrary`), rather
+/// than the type params found inside it (`T: Arbitrary`), is sound for projected
+/// / associated types — where `T: Arbitrary` would *not* imply the projection is
+/// `Arbitrary` — and for nested generics (`Vec<T>: Arbitrary`). Concrete field
+/// types (mentioning no param) are left to the call site, so we don't emit
+/// redundant `u32: Arbitrary`-style bounds.
+///
+/// Deduplicated, in first-seen order. Parse errors are ignored here — they are
 /// surfaced by [`validate_all_attrs`] / codegen, so this best-effort inference
 /// simply contributes nothing for an unparsable field.
-fn inferred_bound_params(input: &DeriveInput, container: &ContainerAttrs) -> Vec<Ident> {
+fn inferred_bound_types(input: &DeriveInput, container: &ContainerAttrs) -> Vec<Type> {
   let type_param_idents: Vec<Ident> = input
     .generics
     .type_params()
@@ -120,7 +127,7 @@ fn inferred_bound_params(input: &DeriveInput, container: &ContainerAttrs) -> Vec
   }
 
   // Collect the `syn::Type`s of every field that is generated via `arbitrary`.
-  let mut generated_tys: Vec<&Type> = Vec::new();
+  let mut generated_tys: Vec<Type> = Vec::new();
 
   // A container `with` builds the whole value itself ⇒ no field uses `arbitrary`.
   if container.with.is_none() {
@@ -144,22 +151,24 @@ fn inferred_bound_params(input: &DeriveInput, container: &ContainerAttrs) -> Vec
     }
   }
 
-  type_param_idents
+  let mut seen = std::collections::HashSet::new();
+  generated_tys
     .into_iter()
-    .filter(|ident| generated_tys.iter().any(|ty| type_uses_param(ty, ident)))
+    .filter(|ty| type_param_idents.iter().any(|p| type_uses_param(ty, p)))
+    .filter(|ty| seen.insert(quote!(#ty).to_string()))
     .collect()
 }
 
 /// Push the `syn::Type` of each field in `fields` that is generated via
 /// `Arbitrary::arbitrary` (i.e. no field `with` and not `default`).
-fn collect_arbitrary_field_types<'a>(fields: &'a syn::Fields, out: &mut Vec<&'a Type>) {
+fn collect_arbitrary_field_types(fields: &syn::Fields, out: &mut Vec<Type>) {
   for field in fields.iter() {
     let attrs = match FieldAttrs::parse(&field.attrs) {
       Ok(a) => a,
       Err(_) => continue,
     };
     if attrs.with.is_none() && !attrs.default {
-      out.push(&field.ty);
+      out.push(field.ty.clone());
     }
   }
 }

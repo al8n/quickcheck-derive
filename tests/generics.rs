@@ -156,3 +156,37 @@ fn field_with_no_extra_bound() {
   assert_eq!(value.inner, NotArb);
   let _shrinks: Vec<FieldWith> = value.shrink().collect();
 }
+
+// --- projected / associated-type field inference (round-2 finding A) ---
+//
+// The generated field is `T::Item`, not `T`. The derive must bound the projected
+// *type* (`<T as Carrier>::Item: Arbitrary`), NOT `T: Arbitrary` — the latter
+// would not imply the projection is `Arbitrary`, and would wrongly demand
+// `T: Arbitrary`. `NotArb` is deliberately NOT `Arbitrary` but its `Item` (u32)
+// is, so this compiles only with field-type-based inference.
+trait Carrier {
+  type Item;
+}
+
+impl Carrier for NotArb {
+  type Item = u32;
+}
+
+#[derive(Clone, Debug, PartialEq, DeriveArbitrary)]
+struct Projected<T: Carrier>
+where
+  T: Clone + 'static,
+  <T as Carrier>::Item: Clone + core::fmt::Debug + PartialEq,
+{
+  item: T::Item,
+  tag: u8,
+}
+
+#[test]
+fn projected_field_type_is_bounded() {
+  let mut g = gen();
+  // Compiles only because the derive bounds `<T as Carrier>::Item: Arbitrary`
+  // (here `u32`), NOT `T: Arbitrary` — `NotArb` is not `Arbitrary`.
+  let value: Projected<NotArb> = Projected::arbitrary(&mut g);
+  let _shrinks: Vec<Projected<NotArb>> = value.shrink().collect();
+}

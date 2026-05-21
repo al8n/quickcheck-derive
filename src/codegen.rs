@@ -317,19 +317,14 @@ fn variant_shrink(
     return nothing;
   }
 
-  // Match-binding idents for each field (one per field; all are referenced by
-  // `rebuild_variant`, so none go unused).
-  let bind_idents: Vec<Ident> = match fields {
-    Fields::Named(named) => named
-      .named
-      .iter()
-      .map(|f| f.ident.clone().expect("named field has ident"))
-      .collect(),
-    Fields::Unnamed(unnamed) => (0..unnamed.unnamed.len())
-      .map(|i| format_ident!("__quickcheck_field{}", i))
-      .collect(),
-    Fields::Unit => Vec::new(),
-  };
+  // Match-binding idents for each field — always fresh `__quickcheck_field{i}`
+  // bindings (never the user's field idents), so a variant field literally named
+  // e.g. `__quickcheck_chain` can't be shadowed by a generated local. Named
+  // variants bind via `real_name: __quickcheck_field{i}` (see the pattern below).
+  // All are referenced by `rebuild_variant`, so none go unused.
+  let bind_idents: Vec<Ident> = (0..fields.len())
+    .map(|i| format_ident!("__quickcheck_field{}", i))
+    .collect();
 
   let is_named = matches!(fields, Fields::Named(_));
 
@@ -372,9 +367,11 @@ fn variant_shrink(
 
   let pattern = match fields {
     Fields::Named(named) => {
-      let binds = named.named.iter().map(|f| {
+      // `real_name: __quickcheck_field{i}` — bind each field to a fresh internal
+      // ident so user field names never become bindings that could collide.
+      let binds = named.named.iter().zip(&bind_idents).map(|(f, bind)| {
         let ident = f.ident.as_ref().expect("named field has ident");
-        quote!(#ident)
+        quote!(#ident: #bind)
       });
       quote!(#name::#vname { #(#binds),* })
     }
