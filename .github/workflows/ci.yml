@@ -57,5 +57,9 @@ jobs:
         run: rustup update stable --no-self-update && rustup default stable
       - name: Build
         run: cargo build --all-targets
-      - name: Test
+      - name: Test (std, default)
         run: cargo test
+      - name: Test (alloc path)
+        # Exercises the `alloc` Box default (the `extern crate alloc` alias);
+        # the generated `alloc::boxed::Box` is the same type as std's here.
+        run: cargo test --no-default-features --features alloc

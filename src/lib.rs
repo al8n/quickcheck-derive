@@ -43,9 +43,10 @@ fn expand(input: DeriveInput) -> syn::Result<TokenStream2> {
   // generated body (collision-free + `mixed_site`).
   let g = hyg.ident("__quickcheck_g");
 
-  // The `Box` type for `shrink`'s return: an explicit `box = "..."` override, or
-  // `::std::boxed::Box` (`std` feature) / `::alloc::boxed::Box` (no-std).
-  let box_ty = box_path(&container)?;
+  // `Box` for `shrink`'s return: an explicit `box = "..."`, or the feature
+  // default. `box_prelude` carries the `extern crate alloc` alias for the
+  // self-contained alloc default (empty otherwise).
+  let (box_prelude, box_ty) = box_setup(&container)?;
 
   let name = &input.ident;
   let (impl_generics, ty_generics, _) = input.generics.split_for_impl();
@@ -66,6 +67,7 @@ fn expand(input: DeriveInput) -> syn::Result<TokenStream2> {
 
   Ok(quote! {
     const _: () = {
+      #box_prelude
       // `#[automatically_derived]` marks this as derive output (and is exempt
       // from `non_local_definitions`); the `allow` is defensive across rustc
       // versions, with `unknown_lints` keeping it valid on toolchains predating
@@ -85,7 +87,10 @@ fn expand(input: DeriveInput) -> syn::Result<TokenStream2> {
   })
 }
 
-/// The `Box` path for `shrink`'s return type.
+/// `Box` selection for `shrink`'s return type, returned as
+/// `(prelude, box_path)`: `prelude` is injected at the top of the generated
+/// `const` block (empty except for the alloc default) and `box_path` is the
+/// `Box` type.
 ///
 /// An explicit container `box = "..."` always wins (and is the only
 /// per-invocation, unification-immune selector). Otherwise the choice comes from
@@ -94,17 +99,28 @@ fn expand(input: DeriveInput) -> syn::Result<TokenStream2> {
 /// per-consumer. `std` takes precedence when both are active; with neither, we
 /// error rather than silently guess. A no-std consumer in a workspace where
 /// `std` gets forced on must set `#[quickcheck(box = "::alloc::boxed::Box")]`.
-fn box_path(container: &ContainerAttrs) -> syn::Result<Path> {
+///
+/// The alloc default is **self-contained**: it aliases the always-available
+/// `alloc` sysroot crate *inside* the generated `const` block
+/// (`extern crate alloc as __quickcheck_alloc;`) so a `#![no_std]` consumer need
+/// not declare `extern crate alloc;` itself (a bare `::alloc` path would fail
+/// with E0433).
+fn box_setup(container: &ContainerAttrs) -> syn::Result<(TokenStream2, Path)> {
   if let Some(p) = &container.box_path {
-    return Ok(p.clone());
+    return Ok((TokenStream2::new(), p.clone()));
   }
   #[cfg(feature = "std")]
   {
-    Ok(syn::parse_quote!(::std::boxed::Box))
+    Ok((TokenStream2::new(), syn::parse_quote!(::std::boxed::Box)))
   }
   #[cfg(all(not(feature = "std"), feature = "alloc"))]
   {
-    Ok(syn::parse_quote!(::alloc::boxed::Box))
+    Ok((
+      quote!(
+        extern crate alloc as __quickcheck_alloc;
+      ),
+      syn::parse_quote!(__quickcheck_alloc::boxed::Box),
+    ))
   }
   #[cfg(all(not(feature = "std"), not(feature = "alloc")))]
   {
