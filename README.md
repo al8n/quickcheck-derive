@@ -158,15 +158,22 @@ fn gen_geo(g: &mut Gen) -> GeoLocation {
 
 Override the `Box` type in the generated `shrink` return
 (`shrink(&self) -> Box<dyn Iterator<Item = Self>>`). By default it is
-`::std::boxed::Box` with the `std` feature, or `::alloc::boxed::Box` in no-std
-(see [Features](#features)); `box` overrides either, e.g. to point at a
-re-exported / custom `Box`:
+`::std::boxed::Box` with the `std` feature, or an internally-aliased
+`alloc::boxed::Box` in no-std (see [Features](#features)); `box` overrides either,
+e.g. to point at a re-exported / custom `Box`:
 
 ```rust,ignore
 #[derive(Clone, Arbitrary)]
 #[quickcheck(box = "my_crate::reexport::Box")]
 struct S { x: u32 }
 ```
+
+> The `box` path is emitted **verbatim** — the consuming crate must be able to
+> resolve it. In particular `box = "alloc::boxed::Box"` (or `"::alloc::..."`)
+> requires the consumer's own `extern crate alloc;`, since the macro cannot add a
+> crate-root import. For no-std the **`alloc` feature** is the self-contained
+> choice (it aliases `alloc` internally); reach for `box` only for a genuinely
+> custom `Box`.
 
 ---
 
@@ -283,17 +290,23 @@ This is a proc-macro crate; its features select what the generated `shrink`
 returns:
 
 - **`std`** (default) — `shrink` returns `::std::boxed::Box<dyn Iterator<…>>`.
-- **`alloc`** — for no-std consumers: `shrink` returns
-  `::alloc::boxed::Box<dyn Iterator<…>>` instead. Enable with
-  `default-features = false, features = ["alloc"]`.
+- **`alloc`** — for no-std consumers: `shrink` returns an
+  `alloc::boxed::Box<dyn Iterator<…>>`. Enable with
+  `default-features = false, features = ["alloc"]`. **Self-contained**: the
+  generated `const` block aliases `alloc` internally
+  (`extern crate alloc as <alias>;`), so the consumer needs **no**
+  `extern crate alloc;` of its own.
 
 Because Cargo **unifies** features and a proc-macro is compiled **once**, the
 `std`/`alloc` choice is workspace-global, not per-consumer: `std` wins if both end
 up enabled, and with **neither** the derive emits a `compile_error!` rather than
-guessing. In a workspace where the wrong default is forced on a no-std consumer,
-use the per-type `#[quickcheck(box = "...")]` override — it is unification-immune.
-(Generation otherwise uses only `core` paths — `core::iter::Iterator`,
-`core::clone::Clone`, `core::default::Default` — so the output is no-std-ready.)
+guessing. If a no-std consumer is in a workspace where `std` gets forced on, give
+that type an explicit `#[quickcheck(box = "...")]` pointing at a `Box` it *can*
+resolve (a re-exported one, or `alloc::boxed::Box` **with** the consumer's own
+`extern crate alloc;` — the `box` path is emitted verbatim and the macro cannot
+add a crate-root import). Generation otherwise uses only `core` paths
+(`core::iter::Iterator`, `core::clone::Clone`, `core::default::Default`), so the
+output is no-std-ready.
 
 ## License
 

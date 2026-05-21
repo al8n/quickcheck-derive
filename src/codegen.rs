@@ -7,16 +7,17 @@ use syn::{spanned::Spanned, DataEnum, DeriveInput, Error, Fields, Ident, Path};
 use crate::attrs::{ContainerAttrs, FieldAttrs, VariantAttrs};
 
 /// Allocates macro-internal identifiers that cannot collide with the target
-/// type's `const` generic parameters.
+/// type's generic parameters.
 ///
-/// `const` params bypass macro hygiene for rustc's E0530 ("let bindings cannot
-/// shadow const parameters") and for pattern-binding resolution, so
-/// `Span::mixed_site()` alone is insufficient — a user `const __quickcheck_chain`
-/// would still clash with a generated `__quickcheck_chain` local. So whenever the
-/// type has a `const` param spelled like one of our `__quickcheck_*` internals,
-/// we append a trailing-underscore suffix to *every* generated name, long enough
-/// that no generated name (which never ends in `_`) can equal any such param. In
-/// the common case (no `__quickcheck_*`-named const param) the suffix is empty.
+/// A `const` param bypasses macro hygiene for rustc's E0530 ("let bindings cannot
+/// shadow const parameters") and for pattern-binding resolution, and a `type` or
+/// `const` param shadows a same-named crate alias in a path (the `extern crate
+/// alloc as __quickcheck_alloc;` default Box path), so `Span::mixed_site()` alone
+/// is insufficient. Whenever the type has a `type` or `const` param spelled like
+/// one of our `__quickcheck_*` internals, we append a trailing-underscore suffix
+/// to *every* generated name, long enough that no generated name (which never
+/// ends in `_`) can equal any such param. In the common case (no
+/// `__quickcheck_*`-named param) the suffix is empty.
 pub(crate) struct Hygiene {
   suffix: String,
 }
@@ -25,8 +26,9 @@ impl Hygiene {
   pub(crate) fn new(input: &DeriveInput) -> Self {
     let max_trailing_underscores = input
       .generics
-      .const_params()
+      .type_params()
       .map(|p| p.ident.to_string())
+      .chain(input.generics.const_params().map(|p| p.ident.to_string()))
       .filter(|name| name.starts_with("__quickcheck_"))
       .map(|name| name.chars().rev().take_while(|&c| c == '_').count())
       .max();

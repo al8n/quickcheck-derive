@@ -46,7 +46,7 @@ fn expand(input: DeriveInput) -> syn::Result<TokenStream2> {
   // `Box` for `shrink`'s return: an explicit `box = "..."`, or the feature
   // default. `box_prelude` carries the `extern crate alloc` alias for the
   // self-contained alloc default (empty otherwise).
-  let (box_prelude, box_ty) = box_setup(&container)?;
+  let (box_prelude, box_ty) = box_setup(&container, &hyg)?;
 
   let name = &input.ident;
   let (impl_generics, ty_generics, _) = input.generics.split_for_impl();
@@ -97,15 +97,20 @@ fn expand(input: DeriveInput) -> syn::Result<TokenStream2> {
 /// this crate's features — but note Cargo **unifies** features and a proc-macro
 /// is compiled **once**, so the feature default is workspace-global, not
 /// per-consumer. `std` takes precedence when both are active; with neither, we
-/// error rather than silently guess. A no-std consumer in a workspace where
-/// `std` gets forced on must set `#[quickcheck(box = "::alloc::boxed::Box")]`.
+/// error rather than silently guess.
 ///
 /// The alloc default is **self-contained**: it aliases the always-available
 /// `alloc` sysroot crate *inside* the generated `const` block
-/// (`extern crate alloc as __quickcheck_alloc;`) so a `#![no_std]` consumer need
-/// not declare `extern crate alloc;` itself (a bare `::alloc` path would fail
-/// with E0433).
-fn box_setup(container: &ContainerAttrs) -> syn::Result<(TokenStream2, Path)> {
+/// (`extern crate alloc as <alias>;`) so a `#![no_std]` consumer need not declare
+/// `extern crate alloc;` itself (a bare `::alloc` path would fail with E0433).
+/// The alias goes through `hyg` so it can't collide with a user generic named
+/// like it. An explicit `box = "..."` path, by contrast, is emitted verbatim —
+/// the consumer is responsible for its resolvability (e.g. `box = "alloc::..."`
+/// needs their own `extern crate alloc;`).
+fn box_setup(
+  container: &ContainerAttrs,
+  _hyg: &codegen::Hygiene,
+) -> syn::Result<(TokenStream2, Path)> {
   if let Some(p) = &container.box_path {
     return Ok((TokenStream2::new(), p.clone()));
   }
@@ -115,11 +120,10 @@ fn box_setup(container: &ContainerAttrs) -> syn::Result<(TokenStream2, Path)> {
   }
   #[cfg(all(not(feature = "std"), feature = "alloc"))]
   {
+    let alias = _hyg.ident("__quickcheck_alloc");
     Ok((
-      quote!(
-        extern crate alloc as __quickcheck_alloc;
-      ),
-      syn::parse_quote!(__quickcheck_alloc::boxed::Box),
+      quote!(extern crate alloc as #alias;),
+      syn::parse_quote!(#alias::boxed::Box),
     ))
   }
   #[cfg(all(not(feature = "std"), not(feature = "alloc")))]

@@ -2,9 +2,11 @@
 //! collide with plausible user names. Compilation is the assertion; the bodies
 //! also exercise `arbitrary` + `shrink` at runtime.
 
-// The const-generic params are intentionally named `g` (lower-case) to collide
-// with the macro's old `arbitrary` parameter; silence the naming lint.
+// Generics here are intentionally named like the macro's internals (lower-case
+// const params, snake_case type params) to test collision avoidance; silence the
+// naming lints.
 #![allow(non_upper_case_globals)]
+#![allow(non_camel_case_types)]
 
 use quickcheck::{Arbitrary, Gen};
 use quickcheck_derive::Arbitrary as DeriveArbitrary;
@@ -185,4 +187,33 @@ fn const_params_named_like_variant_shrink_locals() {
   let _shrinks: Vec<ConstNamedEnum<1, 2>> = value.shrink().collect();
   let mut gen = gen();
   let _generated: ConstNamedEnum<1, 2> = ConstNamedEnum::arbitrary(&mut gen);
+}
+
+// Under the `alloc` feature the generated `extern crate alloc as <alias>` must
+// not collide with a user generic spelled like the alias — the hygiene allocator
+// suffixes it (round-11). Under `std` no alias is emitted; these are exercised
+// under `--no-default-features --features alloc`.
+#[derive(Clone, Debug, PartialEq, DeriveArbitrary)]
+struct AllocAliasConstParam<const __quickcheck_alloc: usize> {
+  x: u32,
+}
+
+#[test]
+fn alloc_alias_vs_const_param() {
+  let v = AllocAliasConstParam::<2> { x: 7 };
+  let _ = v.shrink().count();
+  let mut g = gen();
+  let _: AllocAliasConstParam<2> = AllocAliasConstParam::arbitrary(&mut g);
+}
+
+#[derive(Clone, Debug, PartialEq, DeriveArbitrary)]
+struct AllocAliasTypeParam<__quickcheck_alloc> {
+  x: __quickcheck_alloc,
+}
+
+#[test]
+fn alloc_alias_vs_type_param() {
+  let mut g = gen();
+  let v: AllocAliasTypeParam<u8> = AllocAliasTypeParam::arbitrary(&mut g);
+  let _ = v.shrink().count();
 }
