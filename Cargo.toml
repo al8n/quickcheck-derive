@@ -1,48 +1,44 @@
 [package]
-name = "template-rs"
-version = "0.0.0"
-edition = "2021"
-repository = "https://github.com/al8n/template-rs"
-homepage = "https://github.com/al8n/template-rs"
-documentation = "https://docs.rs/template-rs"
-description = "A template for creating Rust open-source repo on GitHub"
+name = "quickcheck-richderive"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+repository = "https://github.com/al8n/quickcheck-richderive"
+homepage = "https://github.com/al8n/quickcheck-richderive"
+documentation = "https://docs.rs/quickcheck-richderive"
+description = "A `#[derive(Arbitrary)]` proc-macro emitting native `quickcheck::Arbitrary` impls (arbitrary + shrink)."
 license = "MIT OR Apache-2.0"
-rust-version = "1.73"
+keywords = ["quickcheck", "quickcheck-derive", "arbitrary", "testing", "fuzzing"]
+categories = ["development-tools::testing", "rust-patterns"]
 
-[[bench]]
-path = "benches/foo.rs"
-name = "foo"
-harness = false
+[lib]
+proc-macro = true
 
 [features]
 default = ["std"]
-alloc = []
+# Generated `shrink` returns `::std::boxed::Box<dyn Iterator<…>>`.
 std = []
+# no-std: generated `shrink` returns `::alloc::boxed::Box<dyn Iterator<…>>`
+# instead. (A container `#[quickcheck(box = "…")]` overrides either default.)
+alloc = []
 
 [dependencies]
+syn = { version = "2", features = ["full", "extra-traits"] }
+quote = "1"
+proc-macro2 = "1"
 
 [dev-dependencies]
-criterion = "0.8"
-tempfile = "3"
-
-[profile.bench]
-opt-level = 3
-debug = false
-codegen-units = 1
-lto = 'thin'
-incremental = false
-debug-assertions = false
-overflow-checks = false
-rpath = false
+quickcheck = "1"
+trybuild = "1"
 
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
-[lints.rust]
+[lints]
+workspace = true
+
+[workspace.lints.rust]
 rust_2018_idioms = "warn"
 single_use_lifetimes = "warn"
-unexpected_cfgs = { level = "warn", check-cfg = [
-  'cfg(all_tests)',
-  'cfg(tarpaulin)',
-] }
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(docsrs)'] }
