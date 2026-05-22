@@ -113,8 +113,11 @@ mod field_with_mod {
       7
     }
 
+    /// Yields a sentinel value (`u8::MAX`) that `u8`'s default `Arbitrary::shrink`
+    /// can never produce — it only walks toward zero — so observing it in the
+    /// shrunken set unambiguously proves `mod::shrink` was used.
     pub fn shrink(_v: &u8) -> Box<dyn Iterator<Item = u8>> {
-      Box::new(std::iter::once(0))
+      Box::new(std::iter::once(u8::MAX))
     }
   }
 }
@@ -128,11 +131,15 @@ fn field_with_mod_uses_both() {
   // from the helper.
   let probe = field_with_mod::S { x: 9, y: 1 };
   let shrinks: Vec<_> = probe.shrink().collect();
-  // `x`-shrink is fired (yields x=0); `y`-shrink also runs in the default
-  // field-by-field chain. So we get at least one shrunken value with x=0.
+  // The default `u8` shrink for `x = 9` only walks toward zero, so a shrunken
+  // `x == u8::MAX` can ONLY come from our helper — proves the `with`-module
+  // shrink dispatch fired. (A weaker `x == 0` assertion would also pass if the
+  // dispatch were broken, since u8's default shrink yields 0 anyway.)
   assert!(
-    shrinks.iter().any(|s| s.x == 0),
-    "expected at least one shrink to have x=0 from the helper"
+    shrinks.iter().any(|s| s.x == u8::MAX),
+    "expected at least one shrink to have x == u8::MAX from the helper; \
+     got: {:?}",
+    shrinks
   );
 }
 
