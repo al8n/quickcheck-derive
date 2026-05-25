@@ -1,6 +1,6 @@
-//! Integration coverage for `#[quickcheck_richderive::test]`.
+//! Integration coverage for `#[quickcheck_richderive::quickcheck]`.
 //!
-//! These tests run as `cargo test`'s own `#[test]` harness: each `#[quickcheck_richderive::test]`
+//! These tests run as `cargo test`'s own `#[test]` harness: each `#[quickcheck_richderive::quickcheck]`
 //! item expands into a `#[test] fn` that drives `quickcheck::QuickCheck` against
 //! the property body. A passing case = the runner ran `cases` iterations
 //! without panicking; a `#[should_panic]` case = the runner *did* panic (i.e.
@@ -12,7 +12,7 @@ use quickcheck::{Arbitrary, Gen, TestResult};
 // Bare form: vanilla `#[test]`-style use, no attribute args.
 // ---------------------------------------------------------------------------
 
-#[quickcheck_richderive::test]
+#[quickcheck_richderive::quickcheck]
 fn bare_form_bool(xs: Vec<u32>) -> bool {
   let mut a = xs.clone();
   a.sort();
@@ -27,7 +27,7 @@ fn bare_form_bool(xs: Vec<u32>) -> bool {
 // runs. Pair with `max_tests` to confirm both knobs are consumed.
 // ---------------------------------------------------------------------------
 
-#[quickcheck_richderive::test(cases = 5, max_tests = 50)]
+#[quickcheck_richderive::quickcheck(cases = 5, max_tests = 50)]
 fn cases_and_max_tests(x: u8) -> bool {
   let _ = x;
   true
@@ -37,7 +37,7 @@ fn cases_and_max_tests(x: u8) -> bool {
 // `gen_size` and `min_tests_passed`.
 // ---------------------------------------------------------------------------
 
-#[quickcheck_richderive::test(gen_size = 8, min_tests_passed = 1)]
+#[quickcheck_richderive::quickcheck(gen_size = 8, min_tests_passed = 1)]
 fn gen_size_and_min(x: i32) -> bool {
   let _ = x;
   true
@@ -56,7 +56,7 @@ fn small_positive(g: &mut Gen) -> i32 {
   (u8::arbitrary(g) as i32) + 1
 }
 
-#[quickcheck_richderive::test(cases = 30, a = "small_positive")]
+#[quickcheck_richderive::quickcheck(cases = 30, a = "small_positive")]
 fn per_arg_override(a: i32, b: String) -> bool {
   let _ = b;
   (1..=256).contains(&a)
@@ -68,7 +68,7 @@ fn per_arg_override(a: i32, b: String) -> bool {
 // shouldn't restrict any of them.
 // ---------------------------------------------------------------------------
 
-#[quickcheck_richderive::test(cases = 5)]
+#[quickcheck_richderive::quickcheck(cases = 5)]
 fn returns_unit(x: u8) {
   // Asserting inside a unit-returning property is the canonical
   // panic-on-counterexample shape. The vacuously-true assertion proves the
@@ -76,7 +76,7 @@ fn returns_unit(x: u8) {
   assert!(x == x);
 }
 
-#[quickcheck_richderive::test(cases = 5)]
+#[quickcheck_richderive::quickcheck(cases = 5)]
 fn returns_test_result(x: i8) -> TestResult {
   if x.is_negative() {
     TestResult::discard()
@@ -85,7 +85,7 @@ fn returns_test_result(x: i8) -> TestResult {
   }
 }
 
-#[quickcheck_richderive::test(cases = 5)]
+#[quickcheck_richderive::quickcheck(cases = 5)]
 fn returns_result(x: u8) -> Result<(), String> {
   // `Result<T: Testable, E: Debug>` — quickcheck treats `Err` as a failed
   // test. Always-Ok keeps the test passing.
@@ -98,7 +98,7 @@ fn returns_result(x: u8) -> Result<(), String> {
 // for the most likely real-world combination.
 // ---------------------------------------------------------------------------
 
-#[quickcheck_richderive::test(cases = 10, n = "small_positive")]
+#[quickcheck_richderive::quickcheck(cases = 10, n = "small_positive")]
 fn override_with_test_result(n: i32) -> TestResult {
   TestResult::from_bool(n >= 1)
 }
@@ -109,7 +109,7 @@ fn override_with_test_result(n: i32) -> TestResult {
 // ---------------------------------------------------------------------------
 
 #[should_panic]
-#[quickcheck_richderive::test(cases = 100)]
+#[quickcheck_richderive::quickcheck(cases = 100)]
 fn intentionally_failing(x: u32) -> bool {
   // Eventually quickcheck picks `0`; `0 < 0` is false; the runner panics.
   x < x
@@ -127,7 +127,7 @@ fn always_unit_string(_g: &mut Gen) -> String {
   String::new()
 }
 
-#[quickcheck_richderive::test(cases = 5, a = "always_zero_i32", c = "always_unit_string")]
+#[quickcheck_richderive::quickcheck(cases = 5, a = "always_zero_i32", c = "always_unit_string")]
 fn multiple_overrides(a: i32, b: u8, c: String) -> bool {
   // `a` and `c` are pinned; `b` floats freely.
   a == 0 && c.is_empty() && b == b
@@ -138,7 +138,7 @@ fn multiple_overrides(a: i32, b: u8, c: String) -> bool {
 // fn re-emits `mut x: T` (not `x: T`).
 // ---------------------------------------------------------------------------
 
-#[quickcheck_richderive::test(cases = 5)]
+#[quickcheck_richderive::quickcheck(cases = 5)]
 fn mut_param(mut x: u32) -> bool {
   x = x.wrapping_add(1);
   x == x
@@ -149,7 +149,7 @@ fn mut_param(mut x: u32) -> bool {
 // iterations of a `fn() -> bool`.
 // ---------------------------------------------------------------------------
 
-#[quickcheck_richderive::test(cases = 3)]
+#[quickcheck_richderive::quickcheck(cases = 3)]
 fn zero_args() -> bool {
   true
 }

@@ -1,4 +1,4 @@
-//! `#[quickcheck_richderive::test]` proc-macro-attribute.
+//! `#[quickcheck_richderive::quickcheck]` proc-macro-attribute.
 //!
 //! Sibling to the `#[derive(Arbitrary)]` macro: where the derive lets you
 //! attach `arbitrary = "path"` overrides to a *type*'s fields, this attribute
@@ -15,7 +15,7 @@ use syn::ItemFn;
 pub(crate) mod codegen;
 pub(crate) mod parse;
 
-/// Expand `#[quickcheck_richderive::test(args)] fn ...`.
+/// Expand `#[quickcheck_richderive::quickcheck(args)] fn ...`.
 ///
 /// Returns the generated `#[test] fn ...` token stream, or a `syn::Error`
 /// for parse errors / unsupported signatures.

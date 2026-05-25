@@ -1,6 +1,6 @@
-use quickcheck_richderive::test;
+use quickcheck_richderive::quickcheck;
 
-#[test(case = 10)]
+#[quickcheck(case = 10)]
 fn t(x: u8) -> bool {
   let _ = x;
   true

@@ -27,30 +27,31 @@ pub fn derive_arbitrary(input: TokenStream) -> TokenStream {
     .into()
 }
 
-/// Proptest-style `#[test]` attribute with per-arg generator overrides and
-/// per-test config.
+/// Proptest-style `#[quickcheck]` attribute with per-arg generator overrides
+/// and per-test config.
 ///
-/// Drops in as a replacement for `#[quickcheck_macros::quickcheck]`. The bare
-/// form `#[quickcheck_richderive::test]` is behaviour-identical (each arg uses
-/// its type's `Arbitrary` impl); attribute arguments unlock per-arg generators
-/// and per-test runner tuning.
+/// Drops in as a replacement for `#[quickcheck_macros::quickcheck]` (same
+/// attribute name on purpose). The bare form `#[quickcheck_richderive::quickcheck]`
+/// is behaviour-identical to that vanilla attribute (each arg uses its type's
+/// `Arbitrary` impl); attribute arguments unlock per-arg generators and
+/// per-test runner tuning.
 ///
 /// ```ignore
-/// use quickcheck_richderive::test;
+/// use quickcheck_richderive::quickcheck;
 ///
 /// fn small_positive(g: &mut ::quickcheck::Gen) -> i32 {
 ///     (u32::arbitrary(g) % 100) as i32 + 1
 /// }
 ///
-/// #[test(cases = 1000, a = "small_positive")]
+/// #[quickcheck(cases = 1000, a = "small_positive")]
 /// fn round_trip(a: i32, b: String) -> bool {
 ///     encode(&a, &b).decode() == (a, b)
 /// }
 /// ```
 ///
-/// See the README's `#[test] attribute` section for the full key reference.
+/// See the README's `#[quickcheck]` attribute section for the full key reference.
 #[proc_macro_attribute]
-pub fn test(args: TokenStream, item: TokenStream) -> TokenStream {
+pub fn quickcheck(args: TokenStream, item: TokenStream) -> TokenStream {
   let args = TokenStream2::from(args);
   let item = parse_macro_input!(item as ItemFn);
   test_attr::expand(args, item)

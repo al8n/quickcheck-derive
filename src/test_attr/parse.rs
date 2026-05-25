@@ -1,4 +1,4 @@
-//! Parser for `#[quickcheck_richderive::test(...)]` attribute arguments.
+//! Parser for `#[quickcheck_richderive::quickcheck(...)]` attribute arguments.
 //!
 //! The attribute accepts a comma-separated list of `key = value` pairs. Four
 //! keys are *reserved* for runner configuration; every other identifier is
@@ -73,7 +73,7 @@ impl Default for TestAttrArgs {
 
 impl TestAttrArgs {
   /// Parse the attribute's argument tokens. An empty token-stream returns
-  /// defaults — the bare `#[quickcheck_richderive::test]` form.
+  /// defaults — the bare `#[quickcheck_richderive::quickcheck]` form.
   pub(crate) fn parse(tokens: TokenStream2) -> syn::Result<Self> {
     if tokens.is_empty() {
       return Ok(Self::default());
@@ -99,7 +99,7 @@ impl Parse for TestAttrArgs {
       if !seen.insert(key_str.clone()) {
         return Err(Error::new(
           entry.key.span(),
-          format!("duplicate key `{key_str}` in #[quickcheck_richderive::test(...)]"),
+          format!("duplicate key `{key_str}` in #[quickcheck_richderive::quickcheck(...)]"),
         ));
       }
 
@@ -116,7 +116,7 @@ impl Parse for TestAttrArgs {
           return Err(Error::new(
             entry.key.span(),
             format!(
-              "unknown key `{key_str}` in #[quickcheck_richderive::test(...)]; \
+              "unknown key `{key_str}` in #[quickcheck_richderive::quickcheck(...)]; \
                did you mean one of `cases`, `max_tests`, `gen_size`, `min_tests_passed`? \
                (note: deterministic seeding via `seed` is not supported by upstream \
                `quickcheck`; see the README's reference table)"

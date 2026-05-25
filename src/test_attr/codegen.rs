@@ -1,4 +1,4 @@
-//! Code generation for `#[quickcheck_richderive::test]`.
+//! Code generation for `#[quickcheck_richderive::quickcheck]`.
 //!
 //! Given the parsed attribute args and the user's `ItemFn`, emit a `#[test]`
 //! function that:
@@ -198,7 +198,7 @@ fn rewrite_to_inner(
   if asyncness.is_some() {
     return Err(Error::new(
       asyncness.span(),
-      "#[quickcheck_richderive::test] does not support `async fn` — \
+      "#[quickcheck_richderive::quickcheck] does not support `async fn` — \
        quickcheck has no async test runner; remove `async` or wait for upstream support",
     ));
   }
@@ -206,7 +206,7 @@ fn rewrite_to_inner(
   if unsafety.is_some() {
     return Err(Error::new(
       unsafety.span(),
-      "#[quickcheck_richderive::test] does not support `unsafe fn`",
+      "#[quickcheck_richderive::quickcheck] does not support `unsafe fn`",
     ));
   }
   let abi = &item.sig.abi;
@@ -214,7 +214,7 @@ fn rewrite_to_inner(
   if !generics.params.is_empty() {
     return Err(Error::new(
       generics.span(),
-      "#[quickcheck_richderive::test] does not support generic functions",
+      "#[quickcheck_richderive::quickcheck] does not support generic functions",
     ));
   }
   let where_clause = &generics.where_clause;
@@ -233,7 +233,7 @@ fn reject_unsupported_signature(sig: &Signature) -> syn::Result<()> {
   if let Some(variadic) = &sig.variadic {
     return Err(Error::new(
       variadic.span(),
-      "#[quickcheck_richderive::test] does not support variadic functions",
+      "#[quickcheck_richderive::quickcheck] does not support variadic functions",
     ));
   }
   for input in &sig.inputs {
@@ -241,7 +241,7 @@ fn reject_unsupported_signature(sig: &Signature) -> syn::Result<()> {
       FnArg::Receiver(r) => {
         return Err(Error::new(
           r.span(),
-          "#[quickcheck_richderive::test] expects free functions, not methods (no `self`)",
+          "#[quickcheck_richderive::quickcheck] expects free functions, not methods (no `self`)",
         ));
       }
       FnArg::Typed(PatType { pat, .. }) => {
@@ -253,7 +253,7 @@ fn reject_unsupported_signature(sig: &Signature) -> syn::Result<()> {
           _ => {
             return Err(Error::new(
               pat.span(),
-              "#[quickcheck_richderive::test] expects each fn argument to be a plain \
+              "#[quickcheck_richderive::quickcheck] expects each fn argument to be a plain \
                identifier (no patterns); rebind inside the body if you need destructuring",
             ));
           }
@@ -299,7 +299,7 @@ fn build_arg_plans(
       FnArg::Receiver(r) => {
         return Err(Error::new(
           r.span(),
-          "#[quickcheck_richderive::test] expects free functions, not methods",
+          "#[quickcheck_richderive::quickcheck] expects free functions, not methods",
         ));
       }
     }

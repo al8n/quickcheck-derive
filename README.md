@@ -337,9 +337,9 @@ fn gen_pixels(g: &mut Gen) -> Pixels { Pixels::arbitrary(g) }
   field shrunk and the rest cloned. Unit variants, `skip`ped variants, and
   fully held-constant variants shrink to empty.
 
-## `#[test]` attribute
+## `#[quickcheck]` attribute
 
-In addition to the derive, the crate ships a **`#[quickcheck_richderive::test]`**
+In addition to the derive, the crate ships a **`#[quickcheck_richderive::quickcheck]`**
 proc-macro-attribute — a drop-in alternative to
 [`quickcheck_macros::quickcheck`] that adds two knobs:
 
@@ -350,13 +350,13 @@ proc-macro-attribute — a drop-in alternative to
 2. **Per-test runner config**: tune `cases`, `max_tests`, `gen_size`, and
    `min_tests_passed` at the call site.
 
-The bare form behaves like vanilla `#[quickcheck]` — each arg uses its type's
-`Arbitrary`:
+The bare form behaves like vanilla `#[quickcheck]` from `quickcheck_macros` —
+each arg uses its type's `Arbitrary`:
 
 ```rust,ignore
-use quickcheck_richderive::test;
+use quickcheck_richderive::quickcheck;
 
-#[test]
+#[quickcheck]
 fn idempotent(xs: Vec<u32>) -> bool {
     let mut a = xs.clone();
     a.sort(); a.sort();
@@ -369,13 +369,13 @@ fn idempotent(xs: Vec<u32>) -> bool {
 With arguments:
 
 ```rust,ignore
-use quickcheck_richderive::test;
+use quickcheck_richderive::quickcheck;
 
 fn small_positive(g: &mut ::quickcheck::Gen) -> i32 {
     (u8::arbitrary(g) as i32) + 1
 }
 
-#[test(cases = 1000, gen_size = 64, a = "small_positive")]
+#[quickcheck(cases = 1000, gen_size = 64, a = "small_positive")]
 fn round_trip(a: i32, b: String) -> bool {
     let _ = (a, b);
     true
