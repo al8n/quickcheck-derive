@@ -54,7 +54,7 @@ pub fn derive_arbitrary(input: TokenStream) -> TokenStream {
 /// ```
 ///
 /// See the README's `#[quickcheck]` attribute section for the full key
-/// reference, `#[strategy(...)]` semantics, the `prop_assert!` family, and
+/// reference, `#[strategy(...)]` semantics, the `quickcheck_assert!` family, and
 /// the `crate = "..."` knob.
 #[proc_macro_attribute]
 pub fn quickcheck(args: TokenStream, item: TokenStream) -> TokenStream {

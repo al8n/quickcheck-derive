@@ -350,7 +350,7 @@ proc-macro-attribute — a drop-in alternative to
    `min_tests_passed` at the call site.
 3. **`crate = "..."` knob**: point the generated code at a re-exported or
    renamed `quickcheck` (mirrors the derive's `crate` attribute).
-4. **`prop_assert!` / `prop_assert_eq!` / `prop_assert_ne!`** — assertion
+4. **`quickcheck_assert!` / `quickcheck_assert_eq!` / `quickcheck_assert_ne!`** — assertion
    macros that return `TestResult::error(...)` on failure (no panic), so
    the runner can shrink without losing the formatted failure message.
 
@@ -397,7 +397,7 @@ fn round_trip(
 | `max_tests = N` | `u64` literal | `10_000` | `.max_tests(N)` (discard cap) |
 | `gen_size = N` | `usize` literal | `100` | `Gen::new(N)` |
 | `min_tests_passed = N` | `u64` literal | _unset_ | `.min_tests_passed(N)` (omits the chained call when unset) |
-| `crate = "..."` | path string | `::quickcheck` | base path for `Arbitrary` / `Gen` / `QuickCheck` / `TestResult` and the injected `prop_assert!` family |
+| `crate = "..."` | path string | `::quickcheck` | base path for `Arbitrary` / `Gen` / `QuickCheck` / `TestResult` and the injected `quickcheck_assert!` family |
 
 Any other key is rejected with a focused error pointed at the key span — in
 particular, per-arg generators are no longer declared in the outer
@@ -442,7 +442,7 @@ knob is exposed on the attribute surface.
 destructuring pattern (`(a, b): (T, U)`) is rejected by the same
 diagnostic that already rejects pattern-bound parameters.
 
-### `prop_assert!` / `prop_assert_eq!` / `prop_assert_ne!`
+### `quickcheck_assert!` / `quickcheck_assert_eq!` / `quickcheck_assert_ne!`
 
 The attribute injects three assertion macros into scope of the user's body.
 On failure they `return TestResult::error(...)` with a formatted message
@@ -459,14 +459,14 @@ fn sort_is_sorted(xs: Vec<u32>) -> TestResult {
     let mut sorted = xs.clone();
     sorted.sort();
     for w in sorted.windows(2) {
-        prop_assert!(w[0] <= w[1], "ordering violated: {:?}", w);
+        quickcheck_assert!(w[0] <= w[1], "ordering violated: {:?}", w);
     }
     TestResult::passed()
 }
 
 #[quickcheck]
 fn double_then_halve(x: u32) -> TestResult {
-    prop_assert_eq!(x.wrapping_mul(2).wrapping_div(2), x);
+    quickcheck_assert_eq!(x.wrapping_mul(2).wrapping_div(2), x);
     TestResult::passed()
 }
 ```
@@ -484,7 +484,7 @@ Point the generated code at a re-exported or renamed `quickcheck`. Useful
 when `quickcheck` is re-exported through another crate, or vendored under a
 different name. The resolved path is used everywhere the macro names
 `quickcheck` symbols — `Arbitrary`, `Gen`, `QuickCheck`, `TestResult`, and
-the injected `prop_assert!` macro bodies.
+the injected `quickcheck_assert!` macro bodies.
 
 ```rust,ignore
 use quickcheck_richderive::quickcheck;
@@ -510,7 +510,7 @@ The annotated fn may return anything `quickcheck::Testable` accepts:
 * `Result<T: Testable, E: Debug>` — `Err` ⇒ fail
 
 No restriction beyond what `quickcheck` itself enforces. The
-`prop_assert!` family requires `-> TestResult` (or `-> Result<..., ...>`
+`quickcheck_assert!` family requires `-> TestResult` (or `-> Result<..., ...>`
 where the `Ok` type is `TestResult`).
 
 ### Compile-time errors

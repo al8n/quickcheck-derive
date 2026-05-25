@@ -38,7 +38,7 @@ pub(crate) struct TestAttrArgs {
   /// `min_tests_passed = N` — `.min_tests_passed(N)`. `None` ⇒ omit the call.
   pub(crate) min_tests_passed: Option<u64>,
   /// `crate = "path"` — base path for `Arbitrary` / `Gen` / `QuickCheck` /
-  /// `TestResult` and the injected `prop_assert!` macros. Default `::quickcheck`.
+  /// `TestResult` and the injected `quickcheck_assert!` macros. Default `::quickcheck`.
   pub(crate) krate: Option<Path>,
 }
 

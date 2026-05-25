@@ -16,7 +16,7 @@
 //! 4. Builds `QuickCheck::new().rng(Gen::new(gen_size)).tests(...).max_tests(...)`
 //!    [optionally `.min_tests_passed(...)`] and finally `.quickcheck(__wrapper
 //!    as fn(...) -> R)`.
-//! 5. Injects local `prop_assert!` / `prop_assert_eq!` / `prop_assert_ne!`
+//! 5. Injects local `quickcheck_assert!` / `quickcheck_assert_eq!` / `quickcheck_assert_ne!`
 //!    `macro_rules!` definitions before the inner fn item, so the user's
 //!    body can use them. They expand to `return TestResult::error(...)` on
 //!    failure (no panic), which lets the runner shrink without losing the
@@ -171,13 +171,13 @@ pub(crate) fn expand(args: TokenStream2, mut item: ItemFn) -> syn::Result<TokenS
   // libtest harvests as the test, which is the outer `#[test]` fn.
   let outer_attrs = &item.attrs;
 
-  // The `prop_assert!` family — `macro_rules!` items emitted before the
+  // The `quickcheck_assert!` family — `macro_rules!` items emitted before the
   // inner fn so they're in scope for the user's body. Rust's `macro_rules!`
   // scoping is textual and DOES propagate into nested items, including the
   // inner fn we re-emit. The macros expand to
   // `return <qc>::TestResult::error(...)` so failures don't panic and
   // shrinking can proceed; users wanting plain `assert!` keep using it.
-  let prop_macros = prop_assert_macros(&qc);
+  let prop_macros = quickcheck_assert_macros(&qc);
 
   // The wrapper forwards directly: each wrapper param is unwrapped (for
   // strategy args, `.0` peels the newtype; otherwise pass-through) and
@@ -186,7 +186,7 @@ pub(crate) fn expand(args: TokenStream2, mut item: ItemFn) -> syn::Result<TokenS
     #(#outer_attrs)*
     #[test]
     fn #outer_name() {
-      // `prop_assert!` family — in scope for the user's body via macro_rules
+      // `quickcheck_assert!` family — in scope for the user's body via macro_rules
       // textual hoisting.
       #prop_macros
 
@@ -213,10 +213,10 @@ pub(crate) fn expand(args: TokenStream2, mut item: ItemFn) -> syn::Result<TokenS
   })
 }
 
-/// The three `prop_assert*!` macro_rules definitions, parameterised on the
+/// The three `quickcheck_assert*!` macro_rules definitions, parameterised on the
 /// resolved quickcheck crate path. Each macro expands to a `return` of
 /// `<qc>::TestResult::error(...)` on failure — non-panicking, shrink-friendly.
-fn prop_assert_macros(qc: &Path) -> TokenStream2 {
+fn quickcheck_assert_macros(qc: &Path) -> TokenStream2 {
   // `macro_rules!` token-trees aren't templated by `quote` substitution —
   // `$cond` and friends must reach the expander verbatim, while `#qc`
   // *does* substitute the resolved path. The `concat!`/`format!` calls
@@ -224,7 +224,7 @@ fn prop_assert_macros(qc: &Path) -> TokenStream2 {
   // proptest behaviour), since `macro_rules!` expansion preserves the
   // invoker's `Span::call_site` for those builtins.
   quote! {
-    macro_rules! prop_assert {
+    macro_rules! quickcheck_assert {
       ($cond:expr $(,)?) => {
         if !($cond) {
           return #qc::TestResult::error(
@@ -247,7 +247,7 @@ fn prop_assert_macros(qc: &Path) -> TokenStream2 {
       };
     }
 
-    macro_rules! prop_assert_eq {
+    macro_rules! quickcheck_assert_eq {
       ($left:expr, $right:expr $(,)?) => {
         {
           let __qrd_left = &($left);
@@ -289,7 +289,7 @@ fn prop_assert_macros(qc: &Path) -> TokenStream2 {
       };
     }
 
-    macro_rules! prop_assert_ne {
+    macro_rules! quickcheck_assert_ne {
       ($left:expr, $right:expr $(,)?) => {
         {
           let __qrd_left = &($left);

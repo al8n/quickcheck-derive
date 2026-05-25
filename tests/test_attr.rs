@@ -160,52 +160,52 @@ fn zero_args() -> bool {
 }
 
 // ---------------------------------------------------------------------------
-// `prop_assert!` smoke test — passing condition produces no diagnostic.
+// `quickcheck_assert!` smoke test — passing condition produces no diagnostic.
 // ---------------------------------------------------------------------------
 
 #[quickcheck_richderive::quickcheck(cases = 5)]
-fn prop_assert_passing(x: u32) -> TestResult {
-  prop_assert!(x == x);
-  prop_assert!(x == x, "self-equality should hold for x = {x}");
+fn quickcheck_assert_passing(x: u32) -> TestResult {
+  quickcheck_assert!(x == x);
+  quickcheck_assert!(x == x, "self-equality should hold for x = {x}");
   TestResult::passed()
 }
 
 #[quickcheck_richderive::quickcheck(cases = 5)]
-fn prop_assert_eq_passing(x: u8) -> TestResult {
-  prop_assert_eq!(x, x);
-  prop_assert_eq!(x, x, "self-equality (eq) should hold for x = {x}");
+fn quickcheck_assert_eq_passing(x: u8) -> TestResult {
+  quickcheck_assert_eq!(x, x);
+  quickcheck_assert_eq!(x, x, "self-equality (eq) should hold for x = {x}");
   TestResult::passed()
 }
 
 #[quickcheck_richderive::quickcheck(cases = 5)]
-fn prop_assert_ne_passing(x: u8) -> TestResult {
+fn quickcheck_assert_ne_passing(x: u8) -> TestResult {
   // x != x.wrapping_add(1) always, since u8::MAX.wrapping_add(1) == 0 ≠ 255.
-  prop_assert_ne!(x, x.wrapping_add(1));
-  prop_assert_ne!(x, x.wrapping_add(1), "consecutive values differ");
+  quickcheck_assert_ne!(x, x.wrapping_add(1));
+  quickcheck_assert_ne!(x, x.wrapping_add(1), "consecutive values differ");
   TestResult::passed()
 }
 
 // ---------------------------------------------------------------------------
-// `prop_assert!` failure: when the condition is false the macro returns a
+// `quickcheck_assert!` failure: when the condition is false the macro returns a
 // `TestResult::error(...)` with a formatted message. Plain `quickcheck()`
 // turns an `error` result into a panic carrying that message, so we run the
 // expansion through `catch_unwind` and assert on the captured payload.
 // ---------------------------------------------------------------------------
 
 #[test]
-fn prop_assert_failure_panics_with_message() {
+fn quickcheck_assert_failure_panics_with_message() {
   use std::panic;
 
   // The runner panics out of `.quickcheck()` once shrinking lands on a
   // counter-example. We capture the panic message and assert it carries the
-  // `prop_assert!` formatting.
+  // `quickcheck_assert!` formatting.
   let result = panic::catch_unwind(|| {
     // Inline expansion: drive the runner manually so we can inspect the
     // panic. Equivalent to a `#[quickcheck_richderive::quickcheck]` fn
-    // whose body is `prop_assert!(x < 0)` — which fails on the first
+    // whose body is `quickcheck_assert!(x < 0)` — which fails on the first
     // non-negative `i32`.
     fn body(x: i32) -> TestResult {
-      if !(x < 0) {
+      if x >= 0 {
         return TestResult::error(format!(
           "tests/test_attr.rs:0: x < 0: failing-on-purpose at x = {x}"
         ));
@@ -232,14 +232,14 @@ fn prop_assert_failure_panics_with_message() {
 }
 
 #[test]
-fn prop_assert_eq_failure_panics_with_message() {
+fn quickcheck_assert_eq_failure_panics_with_message() {
   use std::panic;
 
   let result = panic::catch_unwind(|| {
     fn body(x: u32) -> TestResult {
       let left = x;
       let right = x.wrapping_add(1);
-      if !(left == right) {
+      if left != right {
         return TestResult::error(format!(
           "tests/test_attr.rs:0: x == x.wrapping_add(1) failed: left = {left:?}, right = {right:?}"
         ));
@@ -265,22 +265,22 @@ fn prop_assert_eq_failure_panics_with_message() {
 }
 
 // ---------------------------------------------------------------------------
-// `prop_assert!` failure routed through a real `#[quickcheck]` expansion —
+// `quickcheck_assert!` failure routed through a real `#[quickcheck]` expansion —
 // the runner panics with the `error` payload baked in. We catch the panic
 // and verify the payload contains the macro's formatting.
 // ---------------------------------------------------------------------------
 
 #[test]
-fn prop_assert_via_macro_routes_through_runner() {
+fn quickcheck_assert_via_macro_routes_through_runner() {
   // This is `#[quickcheck_richderive::quickcheck]` with a deliberately-
-  // failing `prop_assert!`. We can't put `#[should_panic]` *and* peek at the
+  // failing `quickcheck_assert!`. We can't put `#[should_panic]` *and* peek at the
   // panic message in the same test — so we expand the macro manually here
   // by calling the inner machinery via a hand-written runner.
   //
   // We instead construct the equivalent shape inline.
   #[allow(unused_comparisons, clippy::absurd_extreme_comparisons)]
   fn failing_body(x: u32) -> TestResult {
-    macro_rules! prop_assert {
+    macro_rules! quickcheck_assert {
       ($cond:expr $(,)?) => {
         if !($cond) {
           return ::quickcheck::TestResult::error(::std::format!(
@@ -292,7 +292,7 @@ fn prop_assert_via_macro_routes_through_runner() {
         }
       };
     }
-    prop_assert!(x < 0); // false for any non-negative u32 (i.e. all u32)
+    quickcheck_assert!(x < 0); // false for any non-negative u32 (i.e. all u32)
     TestResult::passed()
   }
 
@@ -337,9 +337,9 @@ fn crate_knob_with_strategy(#[strategy(crate::small_positive)] n: i32) -> bool {
 }
 
 #[quickcheck_richderive::quickcheck(cases = 5, crate = "crate::requickcheck")]
-fn crate_knob_with_prop_assert(x: u8) -> requickcheck::TestResult {
-  prop_assert!(x == x);
-  prop_assert_eq!(x, x);
-  prop_assert_ne!(x, x.wrapping_add(1));
+fn crate_knob_with_quickcheck_assert(x: u8) -> requickcheck::TestResult {
+  quickcheck_assert!(x == x);
+  quickcheck_assert_eq!(x, x);
+  quickcheck_assert_ne!(x, x.wrapping_add(1));
   requickcheck::TestResult::passed()
 }

@@ -24,8 +24,8 @@
     renamed `quickcheck` (mirrors the derive's `crate` attribute). The
     resolved path is used everywhere the macro names `quickcheck` symbols —
     `Arbitrary`, `Gen`, `QuickCheck`, `TestResult`, and the injected
-    `prop_assert!` macro bodies. Default `::quickcheck`.
-  - **`prop_assert!` / `prop_assert_eq!` / `prop_assert_ne!`** — assertion
+    `quickcheck_assert!` macro bodies. Default `::quickcheck`.
+  - **`quickcheck_assert!` / `quickcheck_assert_eq!` / `quickcheck_assert_ne!`** — assertion
     macros injected into scope of the user's body. On failure they
     `return TestResult::error(...)` with a formatted message that includes
     file/line + the stringified condition (or `left`/`right` debug-printed
